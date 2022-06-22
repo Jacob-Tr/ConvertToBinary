@@ -5,12 +5,18 @@
 
 /*
     For some reason numbers over 1,999,999,999 fail to produce output.
-    If you discover the reason for this or any other bugs please leave a comment.
+    
+    Everything is shifted to the right by one bit.
+    
+    If you discover the reason for these or any other bugs please leave a comment.
 */
 
 #define BYTE_LEN 8 // Modify this directive for alternate byte architectures.
 
-unsigned char SIGNED_FLAG = 0x0000;
+#define SIGNED_FLAG 0x0001
+#define EDIAN_FLAG 0x0010
+
+unsigned char GEN_FLAG = 0x0000;
 
 short isNumber(const char val)
 {
@@ -54,13 +60,19 @@ short isAcceptableInput(const char* string)
     return 0;
 }
 
-short isSigned() {return SIGNED_FLAG;}
+short isSigned() {return GEN_FLAG & SIGNED_FLAG;}
+
+short isLittleEdian() {return GEN_FLAG & EDIAN_FLAG;}
 
 // Sets 'string' to 'length' 0s separated by spaces.
 void zero(char* string, const size_t length) {for(short i = 0; i < length; i++) string[i] = (!(i % (BYTE_LEN + 1))) ? ' ' : '0';}
 
 // Sets the most significant bit to '1'.
-void flipSignBit(char* string, const size_t length) {string[0] = '1';}
+void flipSignBit(char* string, const size_t length) 
+{
+    if(!isLittleEdian()) string[1] = '1';
+    else string[length] = '1';
+}
 
 void absolute(int* numb) {*numb *= -1;}
 
@@ -68,7 +80,7 @@ void negative(char* string, int* numb)
 {
     if(numb <= 0) return;
     
-    SIGNED_FLAG ^= 0x0001;
+    GEN_FLAG ^= SIGNED_FLAG;
     
     flipSignBit(string, strlen(string));
     absolute(numb);
@@ -77,9 +89,9 @@ void negative(char* string, int* numb)
 // Simulates a single left bitshift; any optimization seems to cause undefined behavior.
 void bitshiftLeft(char* string, const char add, const size_t length)  
 {
-    for(short i = 1; i < length; i++) 
+    for(short i = 2; i < length; i++) 
     {
-        if((i % (BYTE_LEN + 1)) == 0) 
+         if(((i % (BYTE_LEN + 1)) == 0))
         {
             string[i - 1] = string[i + 1];
             i++;
@@ -90,24 +102,42 @@ void bitshiftLeft(char* string, const char add, const size_t length)
     string[length - 1] = add;
 }
 
+void bitshiftRight(char* string, const char add, const size_t length)
+{
+    for(short i = (length - 1); i > 0; i--)
+    {
+        if(((i % (BYTE_LEN + 1)) == 0))
+        {
+            string[i + 1] = string[i - 1];
+            i--;
+            continue;
+        }
+        string[i + 1] = string[i];
+    }
+    string[1] = add;
+}
+
+void bitshift(char* string, const char add, const size_t length)
+{
+    if(isLittleEdian()) bitshiftRight(string, add, length);
+    else bitshiftLeft(string, add, length);
+}
+
 // Simulates the bitwise 'or' operator
 void bitwiseOr(char* string_one, const char* string_two, const size_t length) {for(short i = 0; i < length; i++) if(string_two[i] == '1') string_one[i] = '1';}
 
 char* getBinaryRep(int numb)
 {
-    const size_t length = ((sizeof(int) * BYTE_LEN) + 4);
+    const size_t length = ((sizeof(int) * BYTE_LEN) + ((isLittleEdian()) ? 3 : 4));
     char* string = malloc(length);
     
     zero(string, length);
     
-    if(numb < 0) 
-    {
-        negative(string, &numb);
-    }
+    if(numb < 0) negative(string, &numb);
     
     if(numb == 0 || numb == -0) return string;
     
-    bitshiftLeft(string, '1', length);
+    bitshift(string, '1', length);
     if(numb == 1 || numb == -1) return string;
     
     short complete = (numb == 0) ? 1 : 0;
@@ -117,7 +147,7 @@ char* getBinaryRep(int numb)
         if((multiple * 2) <= numb)
         {
             multiple *= 2;
-            bitshiftLeft(string, '0', length);
+            bitshift(string, '0', length);
         }
         else
         {
@@ -137,12 +167,26 @@ char* getBinaryRep(int numb)
     return string;
 }
 
+void edianness(char* string, const size_t length)
+{
+    if(length < 1) return;
+    if(string[0] != 'L') return;
+    
+    GEN_FLAG ^= EDIAN_FLAG;
+    
+    for(short i = 0; i < length; i++) string[i] = 0;
+    
+    fgets(string, 32, stdin);
+}
 
 int main(void) 
 {
     char* input = malloc((sizeof(char)) * 32);
     
+    printf("For little-edian format please make your first input an 'L' character.\nIf a negative value is supplied a signed representation will be supplied; otherwise unsigned.\n\n");
+    
     fgets(input, 32, stdin);
+    edianness(input, strlen(input));
     
     if(!isAcceptableInput(input))
     {
